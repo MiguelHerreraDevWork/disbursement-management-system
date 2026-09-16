@@ -6,10 +6,10 @@ Source of truth: [`docs/IAS_TECHNICAL_TEST.md`](./IAS_TECHNICAL_TEST.md) (immuta
 
 ## Document Status
 
-- **Current phase:** Design — TDD authored, implementation not started.
+- **Current phase:** Phase 2 complete (backend core: auth, error handling, logging, health) — awaiting approval to begin Phase 3.
 - **Last updated:** 2026-09-16
-- **Implementation status:** 0% (planning only, no code/scaffold/dependencies/Docker/Kubernetes files created yet)
-- **Known blockers:** None. Awaiting approval to begin Phase 1 (scaffold).
+- **Implementation status:** Phases 1–2 of 13 complete and verified (see §20). Phase 1: monorepo scaffold, Docker Compose PostgreSQL, Drizzle schema/migration/seed. Phase 2: `POST /api/auth/login` (JWT issuance), `requireAuth`/`requireRole` middleware, central error handler with the `{error:{code,message,correlationId}}` contract, `pino` structured request logging, `/healthz` and `/readyz`. No business endpoints (disbursement-requests), frontend screens, metrics, or Kubernetes manifests yet.
+- **Known blockers:** None. Awaiting approval to begin Phase 3 (backend domain: create/list/detail for disbursement requests).
 
 This document must be updated whenever: an architectural decision changes, an assumption changes, implementation diverges from this design, a requirement is verified complete, or a new trade-off is introduced. A requirement is marked `DONE` in the traceability table only after it has been verified (automated test, successful build, manual API check, UI check, Docker run, or config inspection) — never merely because code was written.
 
@@ -78,14 +78,14 @@ Traceability table. This table **is** the implementation checklist — status tr
 | RF8 — Rutas explícitas listado/detalle; sincronización tras crear/decidir | React Router routes `/requests`, `/requests/:id`, `/requests/new`; `invalidateQueries` on mutation success | Manual UI walkthrough; frontend test on cache invalidation | TODO |
 | §5 — Duplicate definition ambiguity documented | This TDD §7 (Open question / Assumption / Risk / Follow-up) | Peer/interview review of §7 | TODO |
 | §6 — Communication contract for main ops + RF7, justified vs. alternative | REST/JSON contract (§9) + polling justification vs SSE/WS (§14) | Review of §9 and §14 | TODO |
-| §7-SEC — Verifiable identity, ≥2 access capabilities, server-side authorization | JWT login, `requireAuth` + `requireRole` middleware, roles `ANALYST`/`SUPERVISOR` | Backend integration test: ANALYST calling approve → 403 | TODO |
-| §7-SEC — No frontend-only identity/permission trust | Role read exclusively from verified JWT claim server-side | Code review: no `req.body.role` / `req.headers['x-role']` usage | TODO |
-| §7-SEC — No secrets in code/logs/git history | `.env` + `.env.example`, `.gitignore`, secret pulled from env only | `git log -p` grep for secrets; manual inspection of `.env.example` | TODO |
+| §7-SEC — Verifiable identity, ≥2 access capabilities, server-side authorization | JWT login (`POST /api/auth/login`), `requireAuth` + `requireRole` middleware, roles `ANALYST`/`SUPERVISOR` | `requireAuth`/`requireRole` unit-tested (valid/missing/wrong-secret/malformed token; role match/mismatch/missing user) in `test/middleware.auth.test.ts`; login integration-tested end-to-end and via curl. Full 403-on-a-real-route check (`ANALYST` calling `/approve`) still pending — no protected business route exists until Phase 4 | TODO |
+| §7-SEC — No frontend-only identity/permission trust | Role read exclusively from verified JWT claim server-side | Code review: `grep` for `req.body.role` / `req.headers['x-role']` / `req.query.role` in `apps/api/src` → no matches; `req.user` is populated only inside `requireAuth` from the verified JWT payload | DONE |
+| §7-SEC — No secrets in code/logs/git history | `.env` + `.env.example`, `.gitignore`, secret pulled from env only | `git log -p \| grep -i "password\|secret"` → only placeholder/demo values, field/variable names, and doc prose; no real secret values or a committed `.env`; `.env.example` manually inspected — placeholders only | DONE |
 | §7-SEC — Untrusted `concept`/`reason` cannot execute / alter UI | React text rendering (no `dangerouslySetInnerHTML`), Zod length/charset validation | Manual test: submit `<script>` in concept → rendered as literal text | TODO |
 | §7-SEC — Filters/search cannot alter persistence semantics | Drizzle parameterized queries only; no string-concatenated SQL | Code review; manual test with `' OR 1=1 --` in search param | TODO |
-| §7-SEC — Error responses don't leak stack traces/internals | Central error handler mapping to safe `{code,message}`; full error logged server-side only | Manual API call forcing a 500 → inspect response body | TODO |
-| §8 — Structured logs (correlation id, op, result, status, duration), no auth material logged | `pino` + request-id middleware | Manual run; inspect log line shape; grep for absence of tokens/passwords | TODO |
-| §8 — Health check distinguishing process-up vs. can-serve-traffic | `GET /healthz` (liveness) vs `GET /readyz` (readiness, checks DB) | `curl` both endpoints; stop DB and re-check `/readyz` → 503 | TODO |
+| §7-SEC — Error responses don't leak stack traces/internals | Central error handler mapping to safe `{code,message,correlationId}`; full error logged server-side only | Automated tests (`test/errorHandler.test.ts`) + manual curl forcing a 500 (thrown error) and a 400 (malformed JSON body) → response bodies contain no stack trace/file paths; full error incl. stack logged server-side only | DONE |
+| §8 — Structured logs (correlation id, op, result, status, duration), no auth material logged | `pino` + request-id middleware | Manual run (`npm run dev` + curls) and test-suite output inspected for log line shape (`reqId, method, path, userId, role, operation, result, statusCode, durationMs`); `grep -iE "password\|bearer\|authorization"` over captured log output → no matches | DONE |
+| §8 — Health check distinguishing process-up vs. can-serve-traffic | `GET /healthz` (liveness) vs `GET /readyz` (readiness, checks DB) | `curl` both endpoints (200/200); `docker compose stop db` → `/readyz` returns 503 `{"status":"unavailable","db":"unreachable"}` while `/healthz` still returns 200; `docker compose start db` → `/readyz` returns 200 again once healthy | DONE |
 | §8 — Additional signal beyond logs (metric/trace) | `GET /metrics` (Prometheus format via `prom-client`): request count, error count, duration histogram | `curl /metrics`, inspect exposed series | TODO |
 | §8 — Probes wired to health checks, documented | k8s `livenessProbe`→`/healthz`, `readinessProbe`→`/readyz` | Manifest inspection (§17) | TODO |
 | §9 — Dockerfiles + simple local start incl. DB | `apps/api/Dockerfile`, `apps/web/Dockerfile`, `docker-compose.yml` | `docker compose up` → all services healthy | TODO |
@@ -883,21 +883,21 @@ Each implementation phase (§20) that involved AI assistance gets at least one l
 
 Ordered for critical-path speed: the two invariant-bearing mechanisms (idempotency, concurrency) are built and tested first, ahead of the mandatory-but-non-critical-path items (the `/metrics` signal required by IAS §8, Kubernetes manifests) and ahead of genuinely optional polish (the frontend stretch test, documentation consolidation). Each phase lists a concrete verification step so "done" is never just "code was written."
 
-| # | Phase | Files/components | Requirements covered | Verification |
-|---|---|---|---|---|
-| 1 | Scaffold + Docker Compose skeleton | `apps/api`, `apps/web` skeletons, `docker-compose.yml`, Drizzle schema + migration, seed script (users, suppliers) | Foundation for all | `docker compose up` → `db` healthy, schema applied |
-| 2 | Backend core: auth, error handling, logging, health | `middleware/auth.ts`, `middleware/errorHandler.ts`, `lib/logger.ts`, `/healthz`, `/readyz` | §7-SEC (auth), §8 (logs, health) | `curl /healthz`, `curl /readyz`, login via curl returns JWT |
-| 3 | Backend domain: create (idempotent), list/filter/search/pagination, detail | `modules/disbursement-requests/*` | RF1, RF2, RF3, RF5, §11, §12 | Manual curl walkthrough; duplicate-create returns same id |
-| 4 | Backend domain: approve/reject with conditional update | `modules/disbursement-requests/decide.ts` | RF4, RF6, §5/§7 (state machine) | Manual curl: decide twice → second is 409 |
-| 5 | Backend tests: duplicate + concurrency | `apps/api/test/*.test.ts` | §10 (backend critical test) | `npm test` green |
-| 6 | Frontend scaffold: routing, API client, auth context | `routes/*`, `api/client.ts`, `auth/*` | RF8, §7-SEC (client-side role gating, UX only) | Manual login → redirected to `/requests` |
-| 7 | Frontend: list/detail/new pages with TanStack Query | `routes/requests/*` | RF1–RF4, RF8, §13 | Manual UI walkthrough: create → appears in list → decide → detail updates |
-| 8 | Frontend: polling sync + cache invalidation | query config (`refetchInterval`), mutation `onSuccess` handlers | RF7 | Two-tab manual test: decide in tab A, tab B updates within ~10s |
-| 9 | Frontend test | `apps/web/test/*.test.tsx` | §10 (frontend test) | `npm test` green |
-| 10 | Observability: metrics endpoint (mandatory — IAS §8 requires at least one additional signal beyond logs) | `lib/metrics.ts`, `/metrics` | §8 (additional signal) | `curl /metrics` shows counters after a few requests |
-| 11 | Dockerfiles (api, web) finalized + compose verified end-to-end | `apps/api/Dockerfile`, `apps/web/Dockerfile` | §9 | `docker compose up --build` → full app reachable |
-| 12 | Kubernetes manifests | `k8s/*.yaml` | §9, §8 (probe wiring) | `kubectl apply --dry-run=client -f k8s/` succeeds |
-| 13 | README, `.env.example`, decisions consolidation, AI log finalize, DoD pass | `README.md`, `.env.example`, `docs/AI_USAGE_LOG.md`, this TDD's §21 | §13 (delivery rules) | Manual checklist walkthrough (§21) |
+| # | Phase | Files/components | Requirements covered | Verification | Status |
+|---|---|---|---|---|---|
+| 1 | Scaffold + Docker Compose skeleton | `apps/api`, `apps/web` skeletons, `docker-compose.yml`, Drizzle schema + migration, seed script (users, suppliers) | Foundation for all | `docker compose up` → `db` healthy, schema applied | DONE |
+| 2 | Backend core: auth, error handling, logging, health | `middleware/auth.ts`, `middleware/errorHandler.ts`, `lib/logger.ts`, `/healthz`, `/readyz` | §7-SEC (auth), §8 (logs, health) | `curl /healthz`, `curl /readyz`, login via curl returns JWT | DONE |
+| 3 | Backend domain: create (idempotent), list/filter/search/pagination, detail | `modules/disbursement-requests/*` | RF1, RF2, RF3, RF5, §11, §12 | Manual curl walkthrough; duplicate-create returns same id | TODO |
+| 4 | Backend domain: approve/reject with conditional update | `modules/disbursement-requests/decide.ts` | RF4, RF6, §5/§7 (state machine) | Manual curl: decide twice → second is 409 | TODO |
+| 5 | Backend tests: duplicate + concurrency | `apps/api/test/*.test.ts` | §10 (backend critical test) | `npm test` green | TODO |
+| 6 | Frontend scaffold: routing, API client, auth context | `routes/*`, `api/client.ts`, `auth/*` | RF8, §7-SEC (client-side role gating, UX only) | Manual login → redirected to `/requests` | TODO |
+| 7 | Frontend: list/detail/new pages with TanStack Query | `routes/requests/*` | RF1–RF4, RF8, §13 | Manual UI walkthrough: create → appears in list → decide → detail updates | TODO |
+| 8 | Frontend: polling sync + cache invalidation | query config (`refetchInterval`), mutation `onSuccess` handlers | RF7 | Two-tab manual test: decide in tab A, tab B updates within ~10s | TODO |
+| 9 | Frontend test | `apps/web/test/*.test.tsx` | §10 (frontend test) | `npm test` green | TODO |
+| 10 | Observability: metrics endpoint (mandatory — IAS §8 requires at least one additional signal beyond logs) | `lib/metrics.ts`, `/metrics` | §8 (additional signal) | `curl /metrics` shows counters after a few requests | TODO |
+| 11 | Dockerfiles (api, web) finalized + compose verified end-to-end | `apps/api/Dockerfile`, `apps/web/Dockerfile` | §9 | `docker compose up --build` → full app reachable | TODO |
+| 12 | Kubernetes manifests | `k8s/*.yaml` | §9, §8 (probe wiring) | `kubectl apply --dry-run=client -f k8s/` succeeds | TODO |
+| 13 | README, `.env.example`, decisions consolidation, AI log finalize, DoD pass | `README.md`, `.env.example`, `docs/AI_USAGE_LOG.md`, this TDD's §21 | §13 (delivery rules) | Manual checklist walkthrough (§21) | TODO |
 
 **No fixed per-phase or total time estimate is stated here.** Implementation is prioritized around the assessment's intended 2–3 hour scope: phases 1–8 (scaffold, schema, auth, idempotent create, concurrency-safe decide, backend critical tests, core frontend flow, polling sync) cover every functional requirement and both named critical invariants (duplicate protection, concurrent-decision consistency), and are implemented first and verified before anything else. Phases 9–13 cover the remaining mandatory items that are not on that critical path — the frontend test (§10), the `/metrics` signal (§8, mandatory per IAS's "at least one additional signal"), Docker/Kubernetes finalization (§9), and delivery documentation (§13) — plus genuinely optional polish (the frontend stretch test beyond the one required test, extra Kubernetes manifest fidelity, a separate ADR file). All of phases 9–13 are performed only once the mandatory baseline from phases 1–8 is complete and independently verified (build passes, tests pass, manual checks succeed) — never in parallel with it and never at the cost of rushing or skipping a mandatory item. This ordering intentionally avoids overengineering: nothing here is scope creep, and nothing mandatory is treated as optional.
 
@@ -928,18 +928,18 @@ Derived directly from IAS_TECHNICAL_TEST.md §1–§14.
 - [ ] Explicit frontend routes for list/detail/new; UI stays in sync with backend after create/decide
 
 **Security (§7)**
-- [ ] Verifiable server-issued identity (JWT), not client-asserted
-- [ ] At least two distinct access capabilities enforced server-side (ANALYST vs SUPERVISOR)
-- [ ] No secrets/credentials in code, logs, or git history
+- [x] Verifiable server-issued identity (JWT), not client-asserted
+- [ ] At least two distinct access capabilities enforced server-side (ANALYST vs SUPERVISOR) — `requireRole` middleware implemented and unit-tested; not yet wired to a real protected business route (Phase 4)
+- [x] No secrets/credentials in code, logs, or git history
 - [ ] `concept`/`reason` cannot execute or alter UI behavior (no stored XSS)
 - [ ] Filters/search cannot alter persistence-layer semantics (no injection)
-- [ ] Error responses never leak stack traces/internal details
+- [x] Error responses never leak stack traces/internal details
 
 **Observability (§8)**
-- [ ] Structured logs with correlation id, operation, result, status, duration
-- [ ] No auth material/sensitive data in logs
-- [ ] Liveness endpoint (`/healthz`)
-- [ ] Readiness endpoint (`/readyz`, checks DB)
+- [x] Structured logs with correlation id, operation, result, status, duration
+- [x] No auth material/sensitive data in logs
+- [x] Liveness endpoint (`/healthz`)
+- [x] Readiness endpoint (`/readyz`, checks DB)
 - [ ] At least one additional signal beyond logs (`/metrics`)
 - [ ] Health checks wired to Kubernetes probes, documented
 
