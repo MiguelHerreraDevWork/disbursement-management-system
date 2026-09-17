@@ -12,6 +12,8 @@ coverage/
 .env
 .env.local
 .env.*.local
+# Real k8s secret values, if ever created locally from k8s/secret.example.yaml
+k8s/secret.yaml
 
 # Logs
 logs/

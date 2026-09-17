@@ -1,12 +1,17 @@
 export class AppError extends Error {
   readonly statusCode: number;
   readonly code: string;
+  // Optional extra context included in the error response alongside
+  // {code,message,correlationId} — e.g. §8's requirement that a losing
+  // decide call gets back who won and when, not just a generic conflict.
+  readonly details?: unknown;
 
-  constructor(statusCode: number, code: string, message: string) {
+  constructor(statusCode: number, code: string, message: string, details?: unknown) {
     super(message);
     this.name = "AppError";
     this.statusCode = statusCode;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -39,8 +44,8 @@ export class NotFoundError extends AppError {
 }
 
 export class ConflictError extends AppError {
-  constructor(message = "Conflicting state", code = "CONFLICT") {
-    super(409, code, message);
+  constructor(message = "Conflicting state", code = "CONFLICT", details?: unknown) {
+    super(409, code, message, details);
     this.name = "ConflictError";
   }
 }

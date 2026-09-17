@@ -1,0 +1,10 @@
+# Non-secret configuration for the API Deployment (TDD §17). JWT_EXPIRES_IN
+# is intentionally omitted — the app defaults to "8h" when unset.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ias-api-config
+data:
+  NODE_ENV: "production"
+  PORT: "3000"
+  LOG_LEVEL: "info"

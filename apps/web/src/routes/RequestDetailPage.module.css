@@ -1,0 +1,54 @@
+/* Details on the left, the decision/outcome column on the right — the two
+   things a supervisor needs side by side on a desktop, stacked below it. */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.aside {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.decideIntro {
+  color: var(--color-text-secondary);
+}
+
+.decideActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.decideActions > * {
+  flex: 1;
+}
+
+.rejectForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.rejectActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.rejectActions > * {
+  flex: 1;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -5,6 +5,7 @@ declare global {
     interface Request {
       id: string;
       operation?: string;
+      loggedPath?: string;
       user?: {
         userId: string;
         username: string;

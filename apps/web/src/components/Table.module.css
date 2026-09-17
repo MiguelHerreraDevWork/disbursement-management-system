@@ -1,0 +1,48 @@
+/* Horizontal scroll rather than hiding columns on narrow viewports: every
+   column here (reference, supplier, amount, status, date) is needed to act
+   on a request, so none of them can be dropped on a small screen. */
+.scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.table {
+  min-width: 720px;
+  font-size: var(--text-base);
+}
+
+.table th {
+  padding: var(--space-3) var(--space-5);
+  text-align: left;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-subtle);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table tbody tr:hover {
+  background: var(--color-surface-hover);
+}
+
+.numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.nowrap {
+  white-space: nowrap;
+}

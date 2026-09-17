@@ -1,0 +1,56 @@
+# image is a local build tag (matching apps/api/Dockerfile) — not pushed to
+# a registry, since IAS §9 does not require an actual cluster deployment.
+# imagePullPolicy: IfNotPresent so this also works against a local image
+# loaded into a kind/minikube cluster without a registry.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels:
+    app: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: ias-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: ias-api-config
+            - secretRef:
+                name: ias-api-secrets
+          # Process-up check only — never touches the DB (TDD §15).
+          # initialDelaySeconds accounts for the container's entrypoint
+          # running migrate + seed before the server starts listening.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          # Can-serve-real-traffic check — /readyz verifies the DB is
+          # reachable; a failure here pulls the pod out of Service rotation
+          # without restarting it, since the process itself is fine (TDD §15).
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 250m
+              memory: 512Mi

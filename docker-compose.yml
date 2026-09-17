@@ -9,11 +9,48 @@ services:
       - "5432:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
+
+  api:
+    build: ./apps/api
+    environment:
+      # Built from the same POSTGRES_* values as the db service, but with
+      # "db" (the Compose service name / internal DNS) as the host instead
+      # of "localhost" — the value DATABASE_URL has for host-based
+      # `npm run dev`, which wouldn't resolve from inside this container.
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      PORT: ${PORT}
+      # Hardcoded rather than interpolated from .env's NODE_ENV=development:
+      # a Compose `environment:` entry overrides the Dockerfile's own `ENV
+      # NODE_ENV=production`, and running via docker-compose is specifically
+      # the production-style containerized path, distinct from `npm run dev`.
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:3000/readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  web:
+    build: ./apps/web
+    depends_on:
+      - api
+    ports:
+      - "5173:80"
 
 volumes:
   db-data:

@@ -1,0 +1,48 @@
+.list {
+  display: grid;
+  grid-template-columns: minmax(140px, 200px) 1fr;
+  gap: var(--space-3) var(--space-5);
+  margin: 0;
+}
+
+/* For narrow containers (the decision panel in the detail page's side
+   column), where a two-column split would squeeze values like a rejection
+   reason into a handful of characters per line. */
+.stacked {
+  grid-template-columns: 1fr;
+  gap: var(--space-1);
+}
+
+.stacked .definition:not(:last-child) {
+  margin-bottom: var(--space-3);
+}
+
+.term {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.definition {
+  margin: 0;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+/* Free text captured from an operator (the concept, a rejection reason) can
+   contain newlines — preserve them instead of collapsing the whole thing
+   onto one line. */
+.multiline {
+  white-space: pre-wrap;
+}
+
+@media (max-width: 640px) {
+  .list {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+
+  .definition {
+    margin-bottom: var(--space-3);
+  }
+}

@@ -1,0 +1,70 @@
+/* Filter bar lives inside the results card rather than in a separate panel:
+   filters and the rows they affect read as one unit, and it keeps the page
+   dense, which matters more than decoration in an ops tool. */
+.toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-subtle);
+}
+
+.searchField {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.statusField {
+  flex: 0 0 180px;
+}
+
+.toolbarActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.reference {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+/* Underline on hover only — in a dense table every row would otherwise
+   carry a permanent underline, which reads as noise. */
+.reference a {
+  text-decoration: none;
+}
+
+.reference a:hover {
+  text-decoration: underline;
+}
+
+.supplier {
+  color: var(--color-text-secondary);
+}
+
+.date {
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .toolbar {
+    padding: var(--space-4);
+  }
+
+  .searchField,
+  .statusField {
+    flex: 1 1 100%;
+  }
+
+  .toolbarActions {
+    width: 100%;
+  }
+
+  .toolbarActions > * {
+    flex: 1;
+  }
+}

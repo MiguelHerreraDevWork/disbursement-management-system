@@ -6,10 +6,10 @@ Source of truth: [`docs/IAS_TECHNICAL_TEST.md`](./IAS_TECHNICAL_TEST.md) (immuta
 
 ## Document Status
 
-- **Current phase:** Phase 2 complete (backend core: auth, error handling, logging, health) — awaiting approval to begin Phase 3.
+- **Current phase:** Phase 13 complete — **all 13 implementation phases done.** This assessment's implementation is feature-complete and verified; see the one explicitly-flagged exception below.
 - **Last updated:** 2026-09-16
-- **Implementation status:** Phases 1–2 of 13 complete and verified (see §20). Phase 1: monorepo scaffold, Docker Compose PostgreSQL, Drizzle schema/migration/seed. Phase 2: `POST /api/auth/login` (JWT issuance), `requireAuth`/`requireRole` middleware, central error handler with the `{error:{code,message,correlationId}}` contract, `pino` structured request logging, `/healthz` and `/readyz`. No business endpoints (disbursement-requests), frontend screens, metrics, or Kubernetes manifests yet.
-- **Known blockers:** None. Awaiting approval to begin Phase 3 (backend domain: create/list/detail for disbursement requests).
+- **Implementation status:** All 13 phases complete and verified (see §20 — every row now `DONE`). Phases 1–5: backend foundation, auth, domain endpoints, decide/concurrency, and their tests. Phases 6–9: full frontend. Phase 10: `/metrics`. Phase 11: Dockerfiles + compose, verified end-to-end. Phase 12: Kubernetes manifests, validated with `kubeconform -strict` (no cluster was reachable in this environment) — see earlier entries in this section's history / the AI usage log for full detail on all of these. Phase 13: wrote `README.md` (prerequisites, env vars, quick start, local dev, test commands, main routes, demo credentials, architecture summary, known gaps) and verified every command in it by actually re-running it against the live repo state — `docker compose up -d --build` (all 3 services healthy, login/health/metrics/deep-link all confirmed working), backend tests (58/58), frontend tests (29/29) — rather than writing it from memory. Did a full §21 Definition-of-Done walkthrough: re-read §7/§9/§14 (the design sections behind §5/§6's traceability rows) against the actual implementation and found one real documentation drift — §9's error-format example hadn't been updated for the optional `details` field added in Phase 4 — corrected on the spot. `docs/AI_USAGE_LOG.md` now has one honest entry per phase (13 total). Every §2 traceability row and every §21 checkbox is now `DONE`, with exactly **one** explicitly-flagged, non-deliberate exception: **commit history**. Per this engagement's standing instruction, the assistant never ran `git commit` — only one commit exists (the developer's own Phase 1 commit), and all Phase 2–13 work remains uncommitted in the working tree as of this update. This is called out explicitly in both this document (§21) and `README.md`, not hidden, and is the one remaining action that requires the developer.
+- **Known blockers:** None from the assistant's side. The developer needs to commit the Phase 2–13 work (ideally mirroring the phase structure) and identify the exact delivery branch/commit per IAS §13 before this is ready to submit.
 
 This document must be updated whenever: an architectural decision changes, an assumption changes, implementation diverges from this design, a requirement is verified complete, or a new trade-off is introduced. A requirement is marked `DONE` in the traceability table only after it has been verified (automated test, successful build, manual API check, UI check, Docker run, or config inspection) — never merely because code was written.
 
@@ -68,32 +68,32 @@ Traceability table. This table **is** the implementation checklist — status tr
 
 | Requirement | Technical solution | Verification | Status |
 |---|---|---|---|
-| RF1 — Registrar solicitud (supplier, externalReference, amount, currency, concept) | `POST /api/disbursement-requests`, Zod schema, Drizzle insert with unique constraint | Manual API call (curl/Postman) + backend integration test | TODO |
-| RF2 — Listar con filtro por estado y búsqueda por proveedor/referencia, sin cargar todo el histórico | `GET /api/disbursement-requests?status=&search=&page=&pageSize=`, offset pagination, indexed columns | Manual API call with filters; verify `LIMIT/OFFSET` in generated SQL | TODO |
-| RF3 — Consultar detalle | `GET /api/disbursement-requests/:id` | Manual API call + frontend detail route render | TODO |
-| RF4 — Aprobar/rechazar solicitud pendiente; inmutable tras decisión; razón obligatoria al rechazar | `POST /:id/approve`, `POST /:id/reject` with conditional `UPDATE ... WHERE status='PENDING'` inside a transaction; Zod requires `reason` on reject | Backend integration test: decide twice → second call returns 409 | TODO |
-| RF5 — Reintentos de creación no deben duplicar | Unique DB constraint `(supplier_id, external_reference)` + idempotent `INSERT ... ON CONFLICT DO NOTHING` + re-fetch | Backend integration test: POST same payload twice → same `id`, one row in DB | TODO |
-| RF6 — Decisiones concurrentes consistentes y auditables | Transactional conditional `UPDATE` (row lock) + `decisions` table with `UNIQUE(request_id)` | Backend integration test: `Promise.all` of two decide calls → exactly one 200, one 409, one row in `decisions` | TODO |
-| RF7 — Cambios de otra sesión visibles en ≤10s sin recarga completa | TanStack Query `refetchInterval: 5000` on list/detail queries | Manual two-tab test: decide in tab A, observe tab B update within ~5–10s without reload | TODO |
-| RF8 — Rutas explícitas listado/detalle; sincronización tras crear/decidir | React Router routes `/requests`, `/requests/:id`, `/requests/new`; `invalidateQueries` on mutation success | Manual UI walkthrough; frontend test on cache invalidation | TODO |
-| §5 — Duplicate definition ambiguity documented | This TDD §7 (Open question / Assumption / Risk / Follow-up) | Peer/interview review of §7 | TODO |
-| §6 — Communication contract for main ops + RF7, justified vs. alternative | REST/JSON contract (§9) + polling justification vs SSE/WS (§14) | Review of §9 and §14 | TODO |
-| §7-SEC — Verifiable identity, ≥2 access capabilities, server-side authorization | JWT login (`POST /api/auth/login`), `requireAuth` + `requireRole` middleware, roles `ANALYST`/`SUPERVISOR` | `requireAuth`/`requireRole` unit-tested (valid/missing/wrong-secret/malformed token; role match/mismatch/missing user) in `test/middleware.auth.test.ts`; login integration-tested end-to-end and via curl. Full 403-on-a-real-route check (`ANALYST` calling `/approve`) still pending — no protected business route exists until Phase 4 | TODO |
+| RF1 — Registrar solicitud (supplier, externalReference, amount, currency, concept) | `POST /api/disbursement-requests`, Zod schema, Drizzle insert with unique constraint | Backend: `test/disbursementRequests.create.test.ts` (8 cases) + manual curl. Frontend: `NewRequestPage` (Phase 7) with client-side Zod validation, wired to the real endpoint, browser-verified end to end | DONE |
+| RF2 — Listar con filtro por estado y búsqueda por proveedor/referencia, sin cargar todo el histórico | `GET /api/disbursement-requests?status=&search=&page=&pageSize=`, offset pagination, indexed columns | Backend: `test/disbursementRequests.list.test.ts` + manual curl. Frontend: `RequestsListPage` (Phase 7) — status filter, search, pagination, all URL-driven; browser-verified | DONE |
+| RF3 — Consultar detalle | `GET /api/disbursement-requests/:id` | Backend: `test/disbursementRequests.detail.test.ts` + manual curl. Frontend: `RequestDetailPage` (Phase 7), browser-verified | DONE |
+| RF4 — Aprobar/rechazar solicitud pendiente; inmutable tras decisión; razón obligatoria al rechazar | `POST /:id/approve`, `POST /:id/reject` with conditional `UPDATE ... WHERE status='PENDING'` inside a transaction; Zod requires `reason` on reject | Backend: `test/disbursementRequests.decide.test.ts` + manual curl. Frontend: `RequestDetailPage`'s `SUPERVISOR`-only approve/reject controls (Phase 7), browser-verified — decide twice was already covered by the backend's own 409 test/curl | DONE |
+| RF5 — Reintentos de creación no deben duplicar | Unique DB constraint `(supplier_id, external_reference)` + idempotent `INSERT ... ON CONFLICT DO NOTHING` + re-fetch | Backend integration test: POST same payload twice → same `id`, `idempotentReplay:true` on the retry, direct `testDb` row-count query confirms exactly one row; manual curl walkthrough reproduces the same result against the dev DB | DONE |
+| RF6 — Decisiones concurrentes consistentes y auditables | Transactional conditional `UPDATE` (row lock) + `decisions` table with `UNIQUE(request_id)` | `test/disbursementRequests.decide.test.ts` "Concurrent decisions": `Promise.all([approve, reject])` on the same request → exactly one `200` and one `409`, direct `testDb` query confirms exactly one row in `decisions` matching the actual winner, and a follow-up `GET` detail confirms the final persisted status matches | DONE |
+| RF7 — Cambios de otra sesión visibles en ≤10s sin recarga completa | TanStack Query `refetchInterval: 5000` on list/detail queries | `test/polling.test.tsx` confirms `refetchInterval: 5000` is actually wired into the live query cache for both hooks. Real two-independent-browser-session test: session A approves a request; session B (already viewing it, never reloaded) picks up the change via polling alone in ~4.3s (detail) / ~4.75s (list) — both well under 10s, zero console errors | DONE |
+| RF8 — Rutas explícitas listado/detalle; sincronización tras crear/decidir | React Router routes `/requests`, `/requests/:id`, `/requests/new`; `invalidateQueries` on mutation success | Routes + auth/role guards (Phase 6). Same-session sync via `invalidateQueries` on every mutation (Phase 7), browser-verified: create → appears in list, decide → detail and list both reflect the new status without a manual reload. Cross-*session* sync within ~10s (RF7 polling) is Phase 8 | DONE |
+| §5 — Duplicate definition ambiguity documented | This TDD §7 (Open question / Assumption / Risk / Follow-up) | Re-read at delivery time (Phase 13) and cross-checked against the actual implementation (`disbursement-requests.routes.ts`'s `(supplierId, externalReference)` uniqueness) — accurate, no drift | DONE |
+| §6 — Communication contract for main ops + RF7, justified vs. alternative | REST/JSON contract (§9) + polling justification vs SSE/WS (§14) | Re-read at delivery time (Phase 13): §14 matched the actual `queries.ts` implementation exactly (query keys, `refetchInterval: 5000`); §9's error-format example was found stale — didn't mention the optional `details` field added in Phase 4 — and was corrected on the spot | DONE |
+| §7-SEC — Verifiable identity, ≥2 access capabilities, server-side authorization | JWT login (`POST /api/auth/login`), `requireAuth` + `requireRole` middleware, roles `ANALYST`/`SUPERVISOR` | `requireAuth`/`requireRole` unit-tested in `test/middleware.auth.test.ts`; login integration-tested end-to-end and via curl; `POST /api/disbursement-requests` (`ANALYST`-only) integration-tested and curl-verified: `SUPERVISOR` → real `403 FORBIDDEN`, unauthenticated → `401`. The `SUPERVISOR`-only decide endpoints (approve/reject) land in Phase 4 | DONE |
 | §7-SEC — No frontend-only identity/permission trust | Role read exclusively from verified JWT claim server-side | Code review: `grep` for `req.body.role` / `req.headers['x-role']` / `req.query.role` in `apps/api/src` → no matches; `req.user` is populated only inside `requireAuth` from the verified JWT payload | DONE |
 | §7-SEC — No secrets in code/logs/git history | `.env` + `.env.example`, `.gitignore`, secret pulled from env only | `git log -p \| grep -i "password\|secret"` → only placeholder/demo values, field/variable names, and doc prose; no real secret values or a committed `.env`; `.env.example` manually inspected — placeholders only | DONE |
-| §7-SEC — Untrusted `concept`/`reason` cannot execute / alter UI | React text rendering (no `dangerouslySetInnerHTML`), Zod length/charset validation | Manual test: submit `<script>` in concept → rendered as literal text | TODO |
-| §7-SEC — Filters/search cannot alter persistence semantics | Drizzle parameterized queries only; no string-concatenated SQL | Code review; manual test with `' OR 1=1 --` in search param | TODO |
+| §7-SEC — Untrusted `concept`/`reason` cannot execute / alter UI | React text rendering (no `dangerouslySetInnerHTML`), Zod length/charset validation | `test/RequestDetailPage.test.tsx` renders a `<script>` tag stored in `concept` and asserts it appears as literal text with no injected `<script>` element and no code execution; code review confirms `dangerouslySetInnerHTML` is not used anywhere in `apps/web/src` | DONE |
+| §7-SEC — Filters/search cannot alter persistence semantics | Drizzle parameterized queries only; no string-concatenated SQL | Code review (`disbursement-requests.routes.ts` uses `ilike`/`eq`/`and`/`or` from `drizzle-orm` exclusively, no raw `sql` string interpolation of user input) + automated test with `' OR 1=1 --` as the `search` param → `200` with a literal (empty) substring match, no syntax/server error | DONE |
 | §7-SEC — Error responses don't leak stack traces/internals | Central error handler mapping to safe `{code,message,correlationId}`; full error logged server-side only | Automated tests (`test/errorHandler.test.ts`) + manual curl forcing a 500 (thrown error) and a 400 (malformed JSON body) → response bodies contain no stack trace/file paths; full error incl. stack logged server-side only | DONE |
 | §8 — Structured logs (correlation id, op, result, status, duration), no auth material logged | `pino` + request-id middleware | Manual run (`npm run dev` + curls) and test-suite output inspected for log line shape (`reqId, method, path, userId, role, operation, result, statusCode, durationMs`); `grep -iE "password\|bearer\|authorization"` over captured log output → no matches | DONE |
 | §8 — Health check distinguishing process-up vs. can-serve-traffic | `GET /healthz` (liveness) vs `GET /readyz` (readiness, checks DB) | `curl` both endpoints (200/200); `docker compose stop db` → `/readyz` returns 503 `{"status":"unavailable","db":"unreachable"}` while `/healthz` still returns 200; `docker compose start db` → `/readyz` returns 200 again once healthy | DONE |
-| §8 — Additional signal beyond logs (metric/trace) | `GET /metrics` (Prometheus format via `prom-client`): request count, error count, duration histogram | `curl /metrics`, inspect exposed series | TODO |
-| §8 — Probes wired to health checks, documented | k8s `livenessProbe`→`/healthz`, `readinessProbe`→`/readyz` | Manifest inspection (§17) | TODO |
-| §9 — Dockerfiles + simple local start incl. DB | `apps/api/Dockerfile`, `apps/web/Dockerfile`, `docker-compose.yml` | `docker compose up` → all services healthy | TODO |
-| §9 — K8s manifests: app, Service, config, secret ref, probes, resources | `k8s/*.yaml` (§17) | `kubectl apply --dry-run=client -f k8s/` succeeds | TODO |
-| §10 — Backend critical-behavior test (duplicate or concurrency) | Vitest + Supertest integration tests against test DB | `npm test` passes in `apps/api` | TODO |
-| §10 — Frontend test (data fetching/mutation/authorization) | Vitest + React Testing Library + MSW | `npm test` passes in `apps/web` | TODO |
-| §11 — AI usage log | `docs/AI_USAGE_LOG.md` maintained during implementation (§19) | File exists and is populated at delivery time | TODO |
-| §13 — Delivery rules (README, env example, decisions record, no hidden failures) | README.md, `.env.example`, this TDD as decisions record | Manual checklist review (§21) | TODO |
+| §8 — Additional signal beyond logs (metric/trace) | `GET /metrics` (Prometheus format via `prom-client`): request count, error count, duration histogram | `test/metrics.test.ts` (correct HELP/TYPE lines; hitting an endpoint 5× increments its counter by exactly 5; two different ids on the same route collapse to one `:id`-pattern label, confirming bounded cardinality) + manual curl: hit `/healthz` 5×, `curl /metrics` shows the counter incremented accordingly, histogram buckets populated | DONE |
+| §8 — Probes wired to health checks, documented | k8s `livenessProbe`→`/healthz`, `readinessProbe`→`/readyz` | Manifest inspection (§17): `k8s/api-deployment.yaml` wires both exactly as designed, `kubeconform -strict` confirms structural validity (Phase 12) | DONE |
+| §9 — Dockerfiles + simple local start incl. DB | `apps/api/Dockerfile`, `apps/web/Dockerfile`, `docker-compose.yml` | `docker compose up -d --build` → all three services report healthy/running (db, api both have healthchecks; api's startup log shows migrate → idempotent seed → server start). Backend/frontend test suites (58 + 29) re-confirmed unaffected | DONE |
+| §9 — K8s manifests: app, Service, config, secret ref, probes, resources | `k8s/*.yaml` (§17) | This environment has no reachable Kubernetes cluster, and `kubectl apply --dry-run=client` unexpectedly still requires live API-server discovery in the installed `kubectl` (v1.36.1) — confirmed by testing, not assumed. Validated instead with `kubeconform -strict` (offline, against real current K8s OpenAPI schemas, downloaded for this purpose): all 8 resources across all 8 files valid. Manually cross-checked selector/label, `configMapRef`/`secretRef` name, and port consistency across every file pair | DONE |
+| §10 — Backend critical-behavior test (duplicate or concurrency) | Vitest + Supertest integration tests against the isolated `ias_disbursements_test` DB | `npm test` passes in `apps/api` (55/55) — both critical behaviors covered: RF5 idempotent create and RF6 concurrent decide | DONE |
+| §10 — Frontend test (data fetching/mutation/authorization) | Vitest + React Testing Library + MSW | `npm test` passes in `apps/web` (29/29 across 9 files) — data fetching (loading/error/empty states), mutation (create/approve/reject success+failure), and authorization (role-gated routes and controls) all covered; both §18 Priority-1 and stretch-goal frontend tests present, incl. an explicit assertion that approving invalidates the requests-list cache | DONE |
+| §11 — AI usage log | `docs/AI_USAGE_LOG.md` maintained during implementation (§19) | File exists and is populated at delivery time — 13 entries, one per phase | DONE |
+| §13 — Delivery rules (README, env example, decisions record, no hidden failures) | README.md, `.env.example`, this TDD as decisions record | Manual checklist review (§21): all items done except commit history, which is explicitly flagged (not hidden) as the developer's own remaining action | DONE (with one flagged exception) |
 
 ---
 
@@ -441,12 +441,16 @@ REST/JSON over HTTPS. All endpoints under `/api`. Auth via `Authorization: Beare
   "error": {
     "code": "REQUEST_ALREADY_DECIDED",
     "message": "This request has already been decided.",
-    "correlationId": "a1b2c3d4-..."
+    "correlationId": "a1b2c3d4-...",
+    "details": {
+      "status": "APPROVED",
+      "decision": { "id": "...", "decision": "APPROVED", "reason": null, "decidedBy": "...", "decidedAt": "..." }
+    }
   }
 }
 ```
 
-No stack traces, SQL text, or internal file paths are ever included. `correlationId` matches the request-id used in server logs, so an operator can correlate a client-visible error with the full internal log entry without exposing internals to the client.
+No stack traces, SQL text, or internal file paths are ever included. `correlationId` matches the request-id used in server logs, so an operator can correlate a client-visible error with the full internal log entry without exposing internals to the client. `details` is an **optional** field, present only where §8's concurrent-decision design calls for it: the losing side of a concurrent decide call gets back who won and when, not just a generic conflict message (implemented in Phase 4 — see the `AppError`/`ConflictError` hierarchy in `apps/api/src/lib/errors.ts`). Every other error response omits `details` entirely.
 
 ### Endpoints
 
@@ -887,17 +891,17 @@ Ordered for critical-path speed: the two invariant-bearing mechanisms (idempoten
 |---|---|---|---|---|---|
 | 1 | Scaffold + Docker Compose skeleton | `apps/api`, `apps/web` skeletons, `docker-compose.yml`, Drizzle schema + migration, seed script (users, suppliers) | Foundation for all | `docker compose up` → `db` healthy, schema applied | DONE |
 | 2 | Backend core: auth, error handling, logging, health | `middleware/auth.ts`, `middleware/errorHandler.ts`, `lib/logger.ts`, `/healthz`, `/readyz` | §7-SEC (auth), §8 (logs, health) | `curl /healthz`, `curl /readyz`, login via curl returns JWT | DONE |
-| 3 | Backend domain: create (idempotent), list/filter/search/pagination, detail | `modules/disbursement-requests/*` | RF1, RF2, RF3, RF5, §11, §12 | Manual curl walkthrough; duplicate-create returns same id | TODO |
-| 4 | Backend domain: approve/reject with conditional update | `modules/disbursement-requests/decide.ts` | RF4, RF6, §5/§7 (state machine) | Manual curl: decide twice → second is 409 | TODO |
-| 5 | Backend tests: duplicate + concurrency | `apps/api/test/*.test.ts` | §10 (backend critical test) | `npm test` green | TODO |
-| 6 | Frontend scaffold: routing, API client, auth context | `routes/*`, `api/client.ts`, `auth/*` | RF8, §7-SEC (client-side role gating, UX only) | Manual login → redirected to `/requests` | TODO |
-| 7 | Frontend: list/detail/new pages with TanStack Query | `routes/requests/*` | RF1–RF4, RF8, §13 | Manual UI walkthrough: create → appears in list → decide → detail updates | TODO |
-| 8 | Frontend: polling sync + cache invalidation | query config (`refetchInterval`), mutation `onSuccess` handlers | RF7 | Two-tab manual test: decide in tab A, tab B updates within ~10s | TODO |
-| 9 | Frontend test | `apps/web/test/*.test.tsx` | §10 (frontend test) | `npm test` green | TODO |
-| 10 | Observability: metrics endpoint (mandatory — IAS §8 requires at least one additional signal beyond logs) | `lib/metrics.ts`, `/metrics` | §8 (additional signal) | `curl /metrics` shows counters after a few requests | TODO |
-| 11 | Dockerfiles (api, web) finalized + compose verified end-to-end | `apps/api/Dockerfile`, `apps/web/Dockerfile` | §9 | `docker compose up --build` → full app reachable | TODO |
-| 12 | Kubernetes manifests | `k8s/*.yaml` | §9, §8 (probe wiring) | `kubectl apply --dry-run=client -f k8s/` succeeds | TODO |
-| 13 | README, `.env.example`, decisions consolidation, AI log finalize, DoD pass | `README.md`, `.env.example`, `docs/AI_USAGE_LOG.md`, this TDD's §21 | §13 (delivery rules) | Manual checklist walkthrough (§21) | TODO |
+| 3 | Backend domain: create (idempotent), list/filter/search/pagination, detail | `modules/disbursement-requests/*`, `modules/suppliers/*` | RF1, RF2, RF3, RF5, §11, §12 | Manual curl walkthrough; duplicate-create returns same id | DONE |
+| 4 | Backend domain: approve/reject with conditional update | `modules/disbursement-requests/decide.ts` | RF4, RF6, §5/§7 (state machine) | Manual curl: decide twice → second is 409 | DONE |
+| 5 | Backend tests: duplicate + concurrency | `apps/api/test/*.test.ts` | §10 (backend critical test) | `npm test` green | DONE (built alongside Phases 3–4 rather than as a separate pass — Priority 1/2 and both §18 stretch tests confirmed present; re-verified fresh: `npm test` 55/55 green, concurrency test re-run 5× in isolation with zero flakiness, dev DB confirmed untouched) |
+| 6 | Frontend scaffold: routing, API client, auth context | `routes/*`, `api/client.ts`, `auth/*` | RF8, §7-SEC (client-side role gating, UX only) | Manual login → redirected to `/requests` | DONE — verified in a real headless-browser session against the live backend (login, logout, ANALYST-only route redirect), not just unit tests |
+| 7 | Frontend: list/detail/new pages with TanStack Query | `routes/requests/*` | RF1–RF4, RF8, §13 | Manual UI walkthrough: create → appears in list → decide → detail updates | DONE — 26 RTL/MSW tests + a real headless-browser session running this exact walkthrough against the live backend, zero console errors |
+| 8 | Frontend: polling sync + cache invalidation | query config (`refetchInterval`), mutation `onSuccess` handlers | RF7 | Two-tab manual test: decide in tab A, tab B updates within ~10s | DONE — real two-browser-session test, ~4.3–4.75s update time, no reload |
+| 9 | Frontend test | `apps/web/test/*.test.tsx` | §10 (frontend test) | `npm test` green | DONE — largely already satisfied by Phases 6–8; one targeted gap closed (list-cache invalidation on approve) |
+| 10 | Observability: metrics endpoint (mandatory — IAS §8 requires at least one additional signal beyond logs) | `lib/metrics.ts`, `/metrics` | §8 (additional signal) | `curl /metrics` shows counters after a few requests | DONE |
+| 11 | Dockerfiles (api, web) finalized + compose verified end-to-end | `apps/api/Dockerfile`, `apps/web/Dockerfile` | §9 | `docker compose up --build` → full app reachable | DONE — real headless-browser session against the dockerized stack (nginx-served build + proxied api + Postgres), zero console errors |
+| 12 | Kubernetes manifests | `k8s/*.yaml` | §9, §8 (probe wiring) | `kubectl apply --dry-run=client -f k8s/` succeeds | DONE — validated with `kubeconform -strict` instead (see §2 row above for why); all 8 resources valid |
+| 13 | README, `.env.example`, decisions consolidation, AI log finalize, DoD pass | `README.md`, `.env.example`, `docs/AI_USAGE_LOG.md`, this TDD's §21 | §13 (delivery rules) | Manual checklist walkthrough (§21) | DONE — full §21 walkthrough complete; one flagged exception (commit history, see §21) |
 
 **No fixed per-phase or total time estimate is stated here.** Implementation is prioritized around the assessment's intended 2–3 hour scope: phases 1–8 (scaffold, schema, auth, idempotent create, concurrency-safe decide, backend critical tests, core frontend flow, polling sync) cover every functional requirement and both named critical invariants (duplicate protection, concurrent-decision consistency), and are implemented first and verified before anything else. Phases 9–13 cover the remaining mandatory items that are not on that critical path — the frontend test (§10), the `/metrics` signal (§8, mandatory per IAS's "at least one additional signal"), Docker/Kubernetes finalization (§9), and delivery documentation (§13) — plus genuinely optional polish (the frontend stretch test beyond the one required test, extra Kubernetes manifest fidelity, a separate ADR file). All of phases 9–13 are performed only once the mandatory baseline from phases 1–8 is complete and independently verified (build passes, tests pass, manual checks succeed) — never in parallel with it and never at the cost of rushing or skipping a mandatory item. This ordering intentionally avoids overengineering: nothing here is scope creep, and nothing mandatory is treated as optional.
 
@@ -914,25 +918,25 @@ Ordered for critical-path speed: the two invariant-bearing mechanisms (idempoten
 Derived directly from IAS_TECHNICAL_TEST.md §1–§14.
 
 **Functional (RF1–RF8)**
-- [ ] Create disbursement request (supplier, externalReference, amount, currency, concept)
-- [ ] List requests with status filter
-- [ ] Search by supplier or reference
-- [ ] Pagination (no full-history load)
-- [ ] View request detail
-- [ ] Approve a pending request
-- [ ] Reject a pending request with mandatory reason
-- [ ] Already-decided request cannot be re-decided (409)
-- [ ] Duplicate create (same supplierId+externalReference) does not create a second row
-- [ ] Concurrent decide calls resolve to exactly one winner, consistently and auditably
-- [ ] Status changes from another session appear within ~10s without full reload
-- [ ] Explicit frontend routes for list/detail/new; UI stays in sync with backend after create/decide
+- [x] Create disbursement request (supplier, externalReference, amount, currency, concept) — full stack, browser-verified
+- [x] List requests with status filter — full stack, browser-verified
+- [x] Search by supplier or reference — full stack, browser-verified
+- [x] Pagination (no full-history load) — full stack, browser-verified
+- [x] View request detail — full stack, browser-verified
+- [x] Approve a pending request — full stack, browser-verified
+- [x] Reject a pending request with mandatory reason — full stack, browser-verified
+- [x] Already-decided request cannot be re-decided (409)
+- [x] Duplicate create (same supplierId+externalReference) does not create a second row
+- [x] Concurrent decide calls resolve to exactly one winner, consistently and auditably
+- [x] Status changes from another session appear within ~10s without full reload — real two-session browser test, ~4.3–4.75s, no reload
+- [x] Explicit frontend routes for list/detail/new; UI stays in sync with backend after create/decide — same-session sync via `invalidateQueries` (Phase 7) and cross-session sync via 5s polling (Phase 8), both browser-verified
 
 **Security (§7)**
 - [x] Verifiable server-issued identity (JWT), not client-asserted
-- [ ] At least two distinct access capabilities enforced server-side (ANALYST vs SUPERVISOR) — `requireRole` middleware implemented and unit-tested; not yet wired to a real protected business route (Phase 4)
+- [x] At least two distinct access capabilities enforced server-side (ANALYST vs SUPERVISOR) — `POST /api/disbursement-requests` is `ANALYST`-only (`requireRole`); a `SUPERVISOR` calling it gets a real, tested `403 FORBIDDEN`
 - [x] No secrets/credentials in code, logs, or git history
-- [ ] `concept`/`reason` cannot execute or alter UI behavior (no stored XSS)
-- [ ] Filters/search cannot alter persistence-layer semantics (no injection)
+- [x] `concept`/`reason` cannot execute or alter UI behavior (no stored XSS) — backend stores it as opaque text (tested); frontend renders it via plain JSX text interpolation only, tested with a literal `<script>` tag, `dangerouslySetInnerHTML` confirmed absent from `apps/web/src`
+- [x] Filters/search cannot alter persistence-layer semantics (no injection)
 - [x] Error responses never leak stack traces/internal details
 
 **Observability (§8)**
@@ -940,30 +944,32 @@ Derived directly from IAS_TECHNICAL_TEST.md §1–§14.
 - [x] No auth material/sensitive data in logs
 - [x] Liveness endpoint (`/healthz`)
 - [x] Readiness endpoint (`/readyz`, checks DB)
-- [ ] At least one additional signal beyond logs (`/metrics`)
-- [ ] Health checks wired to Kubernetes probes, documented
+- [x] At least one additional signal beyond logs (`/metrics`)
+- [x] Health checks wired to Kubernetes probes, documented — `k8s/api-deployment.yaml`: `livenessProbe`→`/healthz`, `readinessProbe`→`/readyz`
 
 **Docker & Kubernetes (§9)**
-- [ ] Dockerfile(s) for backend and frontend
-- [ ] `docker-compose.yml` starting app + DB reproducibly with documented commands
-- [ ] Kubernetes manifests: Deployment(s), Service(s), ConfigMap, Secret reference/example, probes, resource requests/limits
+- [x] Dockerfile(s) for backend and frontend
+- [x] `docker-compose.yml` starting app + DB reproducibly — verified with `docker compose up -d --build`; commands not yet written up in the README (Phase 13)
+- [x] Kubernetes manifests: Deployment(s), Service(s), ConfigMap, Secret reference/example, probes, resource requests/limits
 
 **Testing (§10)**
-- [ ] Backend test covering a critical behavior (duplicate/idempotency **and** concurrency, both prioritized here)
-- [ ] Frontend test covering data fetching/mutation/authorization behavior
+- [x] Backend test covering a critical behavior (duplicate/idempotency **and** concurrency, both prioritized here)
+- [x] Frontend test covering data fetching/mutation/authorization behavior — 29/29 across 9 files (Phases 6–9): auth/role guards, login, list data-fetching states, create/approve/reject mutations, stored-XSS regression, polling config, and an explicit list-cache-invalidation-on-approve assertion (§18's stretch goal, verbatim)
 
 **AI usage (§11)**
-- [ ] `docs/AI_USAGE_LOG.md` maintained with real entries by delivery time
+- [x] `docs/AI_USAGE_LOG.md` maintained with real entries by delivery time — one entry per implementation phase (13 total), each with genuine accepted/corrected/rejected examples, not fabricated
 
 **Delivery rules (§13)**
-- [ ] Git repository with comprehensible commit history; branch and exact delivery commit identified
-- [ ] README: prerequisites, env vars, run steps, test steps, main routes
-- [ ] Source code for backend + frontend, migrations/schema, Docker config, Kubernetes artifacts
-- [ ] `.env.example` with no real secrets
-- [ ] Technical decisions record (this TDD) and AI usage log present
-- [ ] Any unimplemented item explicitly identified with a proposed approach — no hidden gaps
+- [ ] Git repository with comprehensible commit history; branch and exact delivery commit identified — **not done**; see the explicit note below and in `README.md`
+- [x] README: prerequisites, env vars, run steps, test steps, main routes — written and every command in it re-run against the actual repo state to confirm accuracy (not written from memory)
+- [x] Source code for backend + frontend, migrations/schema, Docker config, Kubernetes artifacts — all present in the working tree
+- [x] `.env.example` with no real secrets
+- [x] Technical decisions record (this TDD) and AI usage log present
+- [x] Any unimplemented item explicitly identified with a proposed approach — no hidden gaps — see §22 (deliberate scope exclusions) and the note below (the one non-deliberate gap: commit history)
 
-**Traceable decisions (§12)** — all satisfied by this TDD's §5–§14 as written; re-check at delivery time that no divergence crept in during implementation.
+> **Known gap at delivery time — commit history.** Per this engagement's explicit instruction, commits were left entirely under the developer's manual control throughout implementation (the assistant never ran `git commit`). As of Phase 13, exactly one commit exists (the developer's own Phase 1 commit); all Phase 2–13 work sits as uncommitted changes in the working tree. **This must be committed before delivery** — ideally as a series of commits mirroring the 13 phases in §20 and `docs/AI_USAGE_LOG.md`, so the history stays comprehensible — and the exact delivery branch/commit identified per IAS §13. This is the one item in this checklist that could not be verified/completed by re-running a command; it requires the developer's own action.
+
+**Traceable decisions (§12)** — all satisfied by this TDD's §5–§14 as written; re-checked at delivery time (Phase 13) — one real divergence found and fixed (§9's error-format example was missing the `details` field added in Phase 4; see the §2 traceability table).
 
 ---
 

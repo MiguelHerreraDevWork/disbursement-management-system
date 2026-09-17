@@ -13,6 +13,9 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   LOG_LEVEL: z.string().default("info"),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+  // Separate database for integration tests (Vitest sets NODE_ENV=test),
+  // so `npm test` never writes into the dev/demo dataset. See db/client.ts.
+  TEST_DATABASE_URL: z.string().optional(),
   JWT_SECRET: z.string().min(1, "JWT_SECRET is required"),
   JWT_EXPIRES_IN: z.string().default("8h"),
 });

@@ -1,0 +1,13 @@
+# ClusterIP (default) — matches the "api" hostname apps/web/nginx.conf
+# already proxies /api/* to under docker-compose, so the same frontend
+# image works unchanged against this Service in a cluster.
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  selector:
+    app: api
+  ports:
+    - port: 3000
+      targetPort: 3000

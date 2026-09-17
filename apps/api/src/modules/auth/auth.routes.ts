@@ -8,6 +8,7 @@ import { users } from "../../db/schema.js";
 import { env } from "../../lib/env.js";
 import { UnauthorizedError } from "../../lib/errors.js";
 import { parseOrThrow } from "../../lib/validation.js";
+import { captureRoutePath } from "../../middleware/requestLogger.js";
 
 const loginSchema = z.object({
   username: z.string().min(1, "username is required"),
@@ -16,7 +17,7 @@ const loginSchema = z.object({
 
 export const authRouter = Router();
 
-authRouter.post("/login", async (req, res) => {
+authRouter.post("/login", captureRoutePath, async (req, res) => {
   req.operation = "auth.login";
 
   const { username, password } = parseOrThrow(loginSchema, req.body);

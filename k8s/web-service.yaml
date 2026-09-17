@@ -1,0 +1,12 @@
+# ClusterIP (default) — no Ingress/LoadBalancer per TDD §17's explicitly
+# excluded scope; reach it locally via `kubectl port-forward`.
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  selector:
+    app: web
+  ports:
+    - port: 80
+      targetPort: 80

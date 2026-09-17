@@ -2,11 +2,11 @@ import jwt from "jsonwebtoken";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
+import { DEMO_PASSWORD } from "../src/db/seedData.js";
 import { env } from "../src/lib/env.js";
 
-// These tests rely on the demo users seeded by `npm run db:seed`
-// (see apps/api/src/db/seed.ts) against the real local Postgres instance.
-const DEMO_PASSWORD = "Demo-Pass-1234!";
+// These tests rely on the demo users seeded by `npm run db:test:seed`
+// (see apps/api/src/db/seedData.ts) against the isolated test database.
 
 describe("POST /api/auth/login", () => {
   it("issues a verifiable JWT for a valid ANALYST login", async () => {
